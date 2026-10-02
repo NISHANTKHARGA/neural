@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SAFETRAILS · Himalaya Rescue Dashboard</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet"
+        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+        crossorigin="" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+          crossorigin=""></script>
+  <script src="/shared/packet.js"></script>
+</head>
+<body>
+
+  <svg aria-hidden="true" class="bg-mountains" preserveAspectRatio="none" viewBox="0 0 1440 320">
+    <path fill="rgba(255,255,255,0.015)" d="M0,240 L180,60 L340,220 L470,120 L640,260 L820,90 L960,230 L1100,130 L1280,250 L1440,160 L1440,320 L0,320 Z"/>
+    <path fill="rgba(255,255,255,0.03)" d="M0,280 L150,150 L300,270 L430,190 L600,290 L760,170 L900,280 L1060,200 L1220,290 L1440,210 L1440,320 L0,320 Z"/>
+  </svg>
+
+  <header>
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 48 48">
+          <path d="M6 40 L15 24 L20 31 L25 20 L30 30 L35 22 L42 40 Z" fill="#DC143C"/>
+          <path d="M15 24 L20 31 L25 20 L30 30 L35 22 L42 40" fill="none" stroke="#F5F7FA" stroke-width="1.6" stroke-linejoin="round"/>
+          <path d="M24 9 v5 M21 11 h6" stroke="#FFC857" stroke-width="1.6" stroke-linecap="round"/>
+          <circle cx="24" cy="30" r="2" fill="#FFC857"/>
+        </svg>
+      </div>
+      <div class="brand-text">
+        <h1>SAFETRAILS</h1>
+        <span class="tag">हिमालय उद्धार प्रणाली · himalaya rescue network</span>
+      </div>
+    </div>
+    <div id="conn-bar">
+      <span class="pill stat-pill" id="batch-note" title="Gateway / relay serial link">LoRa · 868&nbsp;MHz</span>
+      <select id="mode">
+        <option value="ws" selected>WebSocket (auto)</option>
+        <option value="serial">Web Serial (USB gateway)</option>
+      </select>
+      <button id="alarm-btn" class="pill" title="Chrome blocks audio until you interact — click once to arm the desk siren">🔔 Enable sound</button>
+      <button id="connect">Connect</button>
+      <span id="conn-state" class="state off">disconnected</span>
+    </div>
+  </header>
+
+  <section class="ridge" aria-hidden="true">
+    <svg preserveAspectRatio="none" viewBox="0 0 1440 60">
+      <path d="M0,60 L0,46 L120,12 L210,40 L330,8 L460,44 L560,22 L700,52 L820,16 L960,48 L1080,20 L1230,50 L1360,30 L1440,44 L1440,60 Z" fill="#0E1420"/>
+      <g fill="#DC143C">
+        <path d="M260,34 q2,-7 6,-3 q-1,3 -1,3 Z"/>
+        <path d="M520,26 q2,-8 7,-3 q-1,4 -2,3 Z"/>
+        <path d="M790,18 q2,-8 7,-2 q-1,4 -2,2 Z"/>
+      </g>
+      <g stroke="#0E1420" stroke-width="3" opacity="0" />
+    </svg>
+  </section>
+
+  <main>
+    <section id="stats-row">
+      <div class="stat card">
+        <span class="stat-icon ic-sos">🆘</span>
+        <div>
+          <div class="stat-num" id="stat-sos">0</div>
+          <div class="stat-label">Live SOS incidents</div>
+        </div>
+      </div>
+      <div class="stat card">
+        <span class="stat-icon ic-node">🏔️</span>
+        <div>
+          <div class="stat-num" id="stat-nodes">—</div>
+          <div class="stat-label">Mountain nodes heard</div>
+        </div>
+      </div>
+      <div class="stat card">
+        <span class="stat-icon ic-rescue">🧭</span>
+        <div>
+          <div class="stat-num" id="stat-rescue">0</div>
+          <div class="stat-label">Rescue replies sent</div>
+        </div>
+      </div>
+      <div class="stat card">
+        <span class="stat-icon ic-fix">📍</span>
+        <div>
+          <div class="stat-num" id="stat-fix">—</div>
+          <div class="stat-label">Last GPS fix</div>
+        </div>
+      </div>
+    </section>
+
+    <section id="map-shell">
+      <div id="map"></div>
+      <div id="map-fallback" hidden>
+        <canvas id="map-canvas" width="900" height="480"></canvas>
+        <p class="hint">Offline map fallback — no internet tile reachable.</p>
+      </div>
+    </section>
+
+    <section id="control-row">
+      <div class="card sos-list">
+        <h2><span class="h-head">Incidents</span><span class="h-sup">सुरक्षा खबर</span></h2>
+        <table id="sos-table">
+          <thead>
+            <tr><th>Status</th><th>Src</th><th>Position</th><th>Flags</th><th>Age</th><th></th></tr>
+          </thead>
+          <tbody id="sos-body"></tbody>
+        </table>
+      </div>
+      <div class="card actions">
+        <h2><span class="h-head">Actions</span><span class="h-sup">कारबाही</span></h2>
+        <div class="field">
+          <label for="rescue-dst">🧭 Rescue → target</label>
+          <select id="rescue-dst"></select>
+          <textarea id="rescue-body" rows="2">Stay where you are. Rescue is on the way. We read you.</textarea>
+          <button id="btn-rescue" class="btn-rescue">Send RESCUE</button>
+        </div>
+        <div class="field">
+          <label for="broad-body">📢 Emergency broadcast</label>
+          <textarea id="broad-body" rows="2">Heavy weather approaching. Move to lower ground.</textarea>
+          <button id="btn-broad" class="btn-warn">Broadcast</button>
+        </div>
+        <div class="field">
+          <button id="btn-status" class="ghost">Request node status</button>
+        </div>
+        <div id="node-status" class="status-box"></div>
+      </div>
+    </section>
+
+    <section id="log">
+      <h2><span class="h-head">Packet log</span><span class="h-sup">रेडियो ट्राफिक</span></h2>
+      <pre id="log-body">— connecting to a transport —</pre>
+    </section>
+  </main>
+
+  <footer>
+    <span>SAFETRAILS · Sagarmatha command · made in Nepal 🇳🇵</span>
+    <span class="foot-live" id="foot-live">link: —</span>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

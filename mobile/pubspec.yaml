@@ -1,0 +1,29 @@
+name: safetrails
+description: SAFETRAILS — Offline Emergency Communication Network for Tourists.
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_blue_plus: ^1.35.0
+  geolocator: ^13.0.1
+  provider: ^6.1.2
+  permission_handler: ^11.3.1
+  shared_preferences: ^2.3.2
+  audioplayers: ^5.2.1
+  safetrails_protocol:
+    path: ../shared/protocol/dart
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/siren.wav

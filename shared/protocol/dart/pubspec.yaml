@@ -1,0 +1,15 @@
+name: safetrails_protocol
+description: SAFETRAILS packet codec (shared with ESP32 firmware + JS).
+version: 1.0.0
+publish_to: none
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter

@@ -1,0 +1,21 @@
+{
+  "name": "safetrails-server",
+  "version": "0.1.0",
+  "private": true,
+  "description": "SAFETRAILS rescue dashboard server: serial bridge (or simulator) + WebSocket hub + dashboard static hosting.",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "sim": "node index.js",
+    "test": "node test/server_smoke.js"
+  },
+  "engines": {
+    "node": ">=16"
+  },
+  "dependencies": {
+    "ws": "^8.17.0"
+  },
+  "optionalDependencies": {
+    "serialport": "^12.0.0"
+  }
+}
