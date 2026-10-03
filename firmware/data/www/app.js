@@ -351,20 +351,20 @@ function renderMap() {
   if (state.fallbackMode) {
     const ctx = state.mapFallback;
     ctx.clearRect(0, 0, 900, 480);
-    ctx.strokeStyle = '#2b4150';
+    ctx.strokeStyle = '#d4d4d8';
     ctx.strokeRect(10, 10, 880, 460);
-    ctx.fillStyle = '#3ecf8e';
+    ctx.fillStyle = '#16a34a';
     ctx.font = '12px monospace';
     ctx.fillText('SAFETRAILS · offline projection (26.3–30.5°N / 80–88.2°E)', 20, 24);
     for (const [src, pos] of state.positions) {
       const [x, y] = project(pos.lat, pos.lon);
       ctx.beginPath();
       ctx.arc(x, y, pos.type === 'SOS' ? 9 : 6, 0, Math.PI * 2);
-      ctx.fillStyle = pos.type === 'SOS' ? '#ff5d5d' : pos.type === 'TRACK' ? '#3ecf8e' : '#ffc857';
+      ctx.fillStyle = pos.type === 'SOS' ? '#dc143c' : pos.type === 'TRACK' ? '#16a34a' : '#d97706';
       ctx.fill();
-      ctx.strokeStyle = '#dbe6ee';
+      ctx.strokeStyle = '#18181b';
       ctx.stroke();
-      ctx.fillStyle = '#dbe6ee';
+      ctx.fillStyle = '#18181b';
       ctx.fillText(src + (pos.type === 'SOS' ? ' ●' : ''), x + 10, y - 6);
     }
     return;
@@ -372,7 +372,7 @@ function renderMap() {
   if (!state.map) return;
   for (const [src, pos] of state.positions) {
     const existing = state.markers.get(src);
-    const color = pos.type === 'SOS' ? '#ff5d5d' : pos.type === 'TRACK' ? '#3ecf8e' : '#ffc857';
+    const color = pos.type === 'SOS' ? '#dc143c' : pos.type === 'TRACK' ? '#16a34a' : '#d97706';
     if (existing) {
       existing.setLatLng([pos.lat, pos.lon]);
       existing.setStyle({ color });

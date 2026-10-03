@@ -86,6 +86,13 @@ class SafetrailsPeripheral(private val context: Context) {
     private var advertiser: BluetoothLeAdvertiser? = null
     private val chars = HashMap<UUID, BluetoothGattCharacteristic>()
     private val connected = HashSet<BluetoothDevice>()
+
+    /**
+     * ATT MTU negotiated by the peer central. Android exposes no per-device MTU
+     * on the server side, so track the largest value a client requested via its
+     * own request; 517 matches the ESP32 and the Dart client.
+     */
+    @Volatile private var deviceMtu: Int = 517
     @Volatile private var started = false
 
     @SuppressLint("MissingPermission")
@@ -188,6 +195,23 @@ class SafetrailsPeripheral(private val context: Context) {
                 return false
             }
 
+            // setIncludeDeviceName(true) publishes the ADAPTER's name, not the
+            // serviceName argument. Without this the phone advertises as the
+            // handset model ("Galaxy S21") and the scanner's SAFETRAILS_RELAY
+            // prefix test fails, so two phones cannot discover each other.
+            // Renaming needs BLUETOOTH_CONNECT on API 31+ and throws otherwise.
+            try {
+                if (adapter.name != serviceName) {
+                    adapter.name = serviceName
+                    Log.d(TAG, "adapter renamed to $serviceName")
+                }
+            } catch (e: SecurityException) {
+                Log.w(TAG, "cannot rename adapter (needs BLUETOOTH_CONNECT); " +
+                    "name-based discovery may fail", e)
+            } catch (e: Exception) {
+                Log.w(TAG, "adapter rename failed", e)
+            }
+
             val server = bluetoothManager.openGattServer(context, gattCallback) ?: return false
         val service = BluetoothGattService(SERVICE_UUID, BluetoothGattService.SERVICE_TYPE_PRIMARY)
 
@@ -214,16 +238,19 @@ class SafetrailsPeripheral(private val context: Context) {
         server.addService(service)
         gattServer = server
 
-        // Advertise the SAFETRAILS service + the relay name so the phone shows
-        // up in the app's scan exactly like an ESP32 relay.
+        // Advertise the relay NAME, matching the ESP32 firmware which
+        // deliberately omits the 128-bit service UUID from its 31-byte legacy
+        // payload. The app's scanner (ble_relay_connection.dart) accepts a
+        // device on either the service UUID or the SAFETRAILS_RELAY name
+        // prefix, so the name is what makes one phone discoverable to another.
+        // The UUID goes in the scan response only, which has its own budget.
         val advSettings = AdvertiseSettings.Builder()
             .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
             .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH)
             .setConnectable(true)
             .build()
         val advData = AdvertiseData.Builder()
-            .setIncludeDeviceName(false)
-            .addServiceUuid(ParcelUuid(SERVICE_UUID))
+            .setIncludeDeviceName(true)
             .build()
         val advResponse = AdvertiseData.Builder()
             .addServiceUuid(ParcelUuid(SERVICE_UUID))
@@ -257,9 +284,21 @@ class SafetrailsPeripheral(private val context: Context) {
         val bytes = data.toByteArray(StandardCharsets.UTF_8)
         var ok = false
         val server = gattServer ?: return false
+        // Android truncates a notify to the negotiated ATT MTU (default 23).
+        // A partial JSON packet is unparseable at the far end, so refuse it and
+        // say so rather than sending half an SOS.
+        val mtu = runCatching { deviceMtu }.getOrDefault(517)
+        if (bytes.size > mtu - 3) {
+            Log.w(TAG, "notify DROPPED ${key} ($data) : ${bytes.size}B > ${mtu - 3}B MTU limit")
+            host.onEvent("notifyDropped", mapOf("char" to key, "size" to bytes.size, "limit" to mtu - 3))
+            return false
+        }
         char.value = bytes
         for (device in connected) {
             ok = server.notifyCharacteristicChanged(device, char, false) || ok
+        }
+        if (!ok && connected.isNotEmpty()) {
+            Log.w(TAG, "notify failed for ${connected.size} client(s), key=$key")
         }
         return ok
     }

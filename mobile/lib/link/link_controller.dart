@@ -630,12 +630,19 @@ class LinkController extends ChangeNotifier {
       req.add(utf8.encode(p.toJson()));
       final res = await req.close();
       await res.drain<void>();
-      final ok = res.statusCode == 200;
+      // 200/201 both mean accepted. The server answers 400 for a malformed
+      // body, which must NOT flip _onlineReachable to false: a rejected packet
+      // is a packet problem, not an unreachable server, and silently disabling
+      // the transport here is what made SOS "not reach the dashboard".
+      final ok = res.statusCode >= 200 && res.statusCode < 300;
       client.close();
-      if (!ok) _onlineReachable = false;
+      if (!ok) {
+        _log('online POST rejected: HTTP ${res.statusCode} for ${p.type} ${p.mid}');
+      }
       return ok;
-    } catch (_) {
+    } catch (e) {
       _onlineReachable = false;
+      _log('online POST failed: ${e.toString().split('\n').first}');
       notifyListeners();
       return false;
     }

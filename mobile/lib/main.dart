@@ -4,8 +4,9 @@ import 'package:provider/provider.dart';
 import 'ble/ble_relay_connection.dart';
 import 'gps/gps_service.dart';
 import 'link/link_controller.dart';
-import 'screens/home_screen.dart';
+import 'screens/root_shell.dart';
 import 'state/alert_controller.dart';
+import 'state/session_store.dart';
 import 'state/sos_controller.dart';
 import 'theme/nepali.dart';
 
@@ -70,17 +71,18 @@ class SafetrailsApp extends StatelessWidget {
             return c;
           },
         ),
+        ChangeNotifierProvider<SessionStore>(create: (_) => SessionStore()),
       ],
       child: MaterialApp(
         title: 'SAFETRAILS',
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
-          brightness: Brightness.dark,
+          brightness: Brightness.light,
           useMaterial3: true,
           scaffoldBackgroundColor: Nepali.night,
           colorScheme: ColorScheme.fromSeed(
             seedColor: Nepali.crimson,
-            brightness: Brightness.dark,
+            brightness: Brightness.light,
             primary: Nepali.crimson,
             secondary: Nepali.gold,
             surface: Nepali.panel,
@@ -101,7 +103,7 @@ class SafetrailsApp extends StatelessWidget {
             ),
           ),
         ),
-        home: const HomeScreen(),
+        home: const AuthGate(),
         builder: (context, child) =>
             _PermissionGate(child: child ?? const SizedBox.shrink()),
       ),

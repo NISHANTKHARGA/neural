@@ -101,9 +101,23 @@ const server = http.createServer((req, res) => {
     req.on('end', () => {
       // Phone "Online" transport: ingest a signed SAFETRAILS packet the same
       // way the gateway's serial lines are ingested and broadcast it.
-      ingestLine(body.trim(), 'online');
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ok: true }));
+      // ingestLine can throw on a malformed body; answering 400 keeps the
+      // server alive and tells the phone the packet was rejected rather than
+      // dropping the connection with no reply.
+      try {
+        const accepted = ingestLine(body.trim(), 'online');
+        if (!accepted) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: false, error: 'invalid packet' }));
+          return;
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true }));
+      } catch (e) {
+        log('rst', `online packet rejected: ${e.message}`);
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: e.message }));
+      }
     });
     req.on('error', () => {
       res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -263,13 +277,13 @@ function loadSimulator() {
 // routed/ACKed; the packets shown ARE the gateway's voice.
 // ---------------------------------------------------------------------------
 function ingestLine(line, via) {
-  if (!line) return;
+  if (!line) return false;
   let packet;
   try {
     // Lines from serial may be a raw JSON packet OR a command envelope. Only
     // packets are ingested; envelopes are internal to the firmware.
     const parsed = JSON.parse(line);
-    if (parsed.cmd) return;
+    if (parsed.cmd) return true;
     packet = codec.fromJson(line); // validates checksum + schema
   } catch (e) {
     // Some firmware lines carry a stray prefix/suffix around a valid packet
@@ -287,21 +301,65 @@ function ingestLine(line, via) {
       } catch (_) { /* not a packet */ }
     }
     if (recovered) {
-      packet = codec.fromJson(JSON.stringify(recovered));
+      // The retry MUST stay wrapped: fromJson throws BAD_CHECKSUM/BAD_VERSION on
+      // anything malformed, and letting that escape ingestLine killed the whole
+      // server process (uncaught in the req 'end' handler), taking the dashboard
+      // offline for every operator. A bad packet is a client error, never fatal.
+      try {
+        packet = codec.fromJson(JSON.stringify(recovered));
+      } catch (e2) {
+        const t2 = String(line).slice(0, 320);
+        if (t2) log('rst', `rejected [${via}]: ${e2.message} :: ${t2}`);
+        return false;
+      }
     } else {
       // Meaningless line; mirror it into [rst] so NimBLE/serial debug is visible.
       const t = String(line).slice(0, 320);
       if (t) log('rst', t);
-      return;
+      return false;
     }
   }
-  log('rx', `[${via}] ${packet.type} ${packet.src}->${packet.dst} ${packet.mid} lat=${packet.lat} lon=${packet.lon}${packet.type === 'STATUS' ? ' ' + packet.body : ''}`);
+  try {
+    log('rx', `[${via}] ${packet.type} ${packet.src}->${packet.dst} ${packet.mid} lat=${packet.lat} lon=${packet.lon}${packet.type === 'STATUS' ? ' ' + packet.body : ''}`);
     broadcast({ evt: 'packet', packet, via });
+    return true;
+  } catch (e3) {
+    log('rst', `broadcast failed [${via}]: ${e3.message}`);
+    return false;
+  }
 }
 
 // ---------------------------------------------------------------------------
 // Dashboard commands -> transport
 // ---------------------------------------------------------------------------
+
+// Node id of the rescue gateway (firmware: -DST_NODE_ID="RCUE"). Packets the
+// desk authors are attributed to it, matching what the gateway puts on the air.
+const GATEWAY_ID = 'RCUE';
+
+// Packet ids are capped at 16 chars (shared/protocol/PROTOCOL.md). A 3-letter
+// prefix plus base36 millis fits comfortably and stays unique across a session.
+function newDeskMid(prefix) {
+  return (prefix + Date.now().toString(36)).slice(0, 16).toUpperCase();
+}
+
+// Show a desk-authored command in the dashboard's own incident list. Built with
+// the shared codec so it carries a valid checksum and renders like any other
+// packet, rather than a hand-shaped object the UI might reject later.
+function reflectDeskPacket(fields) {
+  try {
+    const packet = codec.buildPacket(Object.assign({
+      hop: 0,
+      flags: 0,
+      ts: Math.floor(Date.now() / 1000),
+      path: [],
+    }, fields));
+    broadcast({ evt: 'packet', packet, via: 'desk' });
+  } catch (e) {
+    log('warn', `desk packet reflection failed: ${e.message}`);
+  }
+}
+
 function handleCommand(client, msg) {
   if (!msg || typeof msg.cmd !== 'string') return;
 
@@ -324,6 +382,25 @@ function handleCommand(client, msg) {
       transport.write({
         cmd: 'rescue', dst: String(msg.dst),
         body: String(msg.body || ''), prio: Number(msg.prio || 2),
+      });
+      // Reflect the desk's own RESCUE into the incident list.
+      //
+      // The gateway authors this packet with src=RCUE and a non-broadcast dst
+      // (the tourist), so the router never takes its DELIVER path and nothing
+      // is echoed back over serial. The operator watched it arrive on the phone
+      // while their own log stayed empty.
+      //
+      // BROADCAST needs no reflection: dst="*" makes it destMe, so the normal
+      // DELIVER path already reports it. That asymmetry is exactly why only
+      // RESCUE was missing.
+      reflectDeskPacket({
+        type: 'RESCUE',
+        mid: newDeskMid('RSC'),
+        src: GATEWAY_ID,
+        dst: String(msg.dst),
+        prio: Number(msg.prio || 2),
+        ttl: 8,
+        body: String(msg.body || ''),
       });
       break;
     }

@@ -8,6 +8,10 @@ import 'package:permission_handler/permission_handler.dart';
 
 import 'package:safetrails_protocol/packet.dart';
 
+/// ATT MTU negotiated on every relay link. Must match the ESP32 firmware's
+/// 517: packets are 188-325 bytes, so Android's 23-byte default truncates them.
+const int kMtu = 517;
+
 /// Adapter UUIDs — see shared/protocol/PROTOCOL.md §3.
 abstract final class StUuids {
   static const service = '2f32f800-6a00-4f6a-9a5e-001122334455';
@@ -233,6 +237,11 @@ class BleRelayConnection {
       _errorController.value = 'Failed to connect to relay';
       return;
     }
+    // Negotiate the MTU before any packet moves. Without this the link stays at
+    // Android's default 23 bytes and every SOS (188-325 bytes on the wire) is
+    // truncated or fails outright -- which is what stopped phone-to-phone
+    // relays while the ESP32 (which sets MTU 517 server-side) kept working.
+    await target.requestMtu(kMtu);
     try {
       await _setupService();
     } catch (e) {
@@ -361,9 +370,17 @@ class BleRelayConnection {
       (c) => c.uuid.toString().toUpperCase() == uuid.toUpperCase(),
     );
     final bytes = Uint8List.fromList(utf8.encode(p.toJson()));
+    // Guard rather than truncate: a short packet is a corrupt SOS that the
+    // desk cannot distinguish from a real one. Fail loudly instead.
+    if (bytes.length > kMtu - 3) {
+      _errorController.value =
+          'Packet ${p.type} ${p.mid} is ${bytes.length}B, over the ${kMtu - 3}B '
+          'BLE limit — not sent';
+      return false;
+    }
     for (var i = 0; i < retries; i++) {
       try {
-        await c.write(bytes).timeout(const Duration(seconds: 5));
+        await c.write(bytes, withoutResponse: false).timeout(const Duration(seconds: 5));
         return true;
       } catch (_) {
         await Future<void>.delayed(Duration(milliseconds: 400 * (i + 1)));

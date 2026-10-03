@@ -94,7 +94,7 @@ class _BrandHeader extends StatelessWidget {
   }
 }
 
-/// Prayer flags over layered Himalaya ridges — the app's visual identity.
+/// Himalaya ridges in crimson, with the summit marked — the app's visual identity.
 class _HimalayaPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
@@ -114,7 +114,7 @@ class _HimalayaPainter extends CustomPainter {
       ..lineTo(w, h * 0.56)
       ..lineTo(w, h)
       ..close();
-    canvas.drawPath(far, Paint()..color = const Color(0xFF0D2440));
+    canvas.drawPath(far, Paint()..color = const Color(0xFFF2C6CD));
 
     // The big Sagarmatha massif in front.
     final ridge = Path()
@@ -130,7 +130,7 @@ class _HimalayaPainter extends CustomPainter {
       ..lineTo(w, h * 0.78)
       ..lineTo(w, h)
       ..close();
-    canvas.drawPath(ridge, Paint()..color = Nepali.royal);
+    canvas.drawPath(ridge, Paint()..color = Nepali.crimson);
 
     // Snow cap on the summit.
     final cap = Path()
@@ -141,43 +141,18 @@ class _HimalayaPainter extends CustomPainter {
       ..lineTo(w * 0.55, h * 0.52)
       ..lineTo(w * 0.53, h * 0.60)
       ..close();
-    canvas.drawPath(cap, Paint()..color = Nepali.snow);
+    canvas.drawPath(cap, Paint()..color = Colors.white);
 
-    // Prayer-flag cord strung across the sky.
-    final cord = Paint()
-      ..color = const Color(0xFFD9E2EC)
-      ..strokeWidth = 1.4
+    // Summit marker.
+    final marker = Paint()
+      ..color = Nepali.crimsonDark
+      ..strokeWidth = 1.6
+      ..strokeCap = StrokeCap.round
       ..style = PaintingStyle.stroke;
-    final cx0 = w * 0.06, cy0 = 8.0, cx1 = w * 0.94, cy1 = 26.0;
-    canvas.drawLine(Offset(cx0, cy0), Offset(cx1, cy1), cord);
-
-    const colors = [
-      Nepali.prayerBlue,
-      Nepali.prayerWhite,
-      Nepali.prayerRed,
-      Nepali.prayerGreen,
-      Nepali.prayerGold,
-    ];
-    const flagW = 16.0, flagH = 20.0, gap = 13.0;
-    var i = 0;
-    for (var x = cx0 + 6; x < cx1 - 8; x += gap) {
-      // Point on the cord (slight linear sag is fine for a stylized banner).
-      final t = (x - cx0) / (cx1 - cx0);
-      final ytop = cy0 + (cy1 - cy0) * t;
-      final col = colors[i % colors.length];
-      final flag = Path()
-        ..moveTo(x, ytop)
-        ..lineTo(x + flagW, ytop + flagH)
-        ..lineTo(x + flagW * 0.5, ytop + 4)
-        ..lineTo(x, ytop + flagH)
-        ..close();
-      canvas.drawPath(
-          flag,
-          Paint()
-            ..color = col.withValues(alpha: 0.92)
-            ..style = PaintingStyle.fill);
-      i++;
-    }
+    canvas.drawLine(
+        Offset(w * 0.55, h * 0.10), Offset(w * 0.55, h * 0.20), marker);
+    canvas.drawLine(
+        Offset(w * 0.52, h * 0.15), Offset(w * 0.58, h * 0.15), marker);
   }
 
   @override
@@ -263,12 +238,6 @@ class _SosButtonState extends State<_SosButton> {
           ),
           child: Stack(
             children: [
-              Positioned(
-                top: 12,
-                left: 18,
-                right: 18,
-                child: CustomPaint(painter: _SosFlagsPainter()),
-              ),
               Center(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -355,39 +324,6 @@ class _SosButtonState extends State<_SosButton> {
   }
 }
 
-/// Tiny prayer flag strung along the top of the SOS button.
-class _SosFlagsPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    const colors = [
-      Nepali.prayerBlue,
-      Nepali.prayerWhite,
-      Nepali.prayerRed,
-      Nepali.prayerGreen,
-      Nepali.prayerGold,
-    ];
-    final cord = Paint()
-      ..color = Colors.white.withValues(alpha: 0.6)
-      ..strokeWidth = 1;
-    const y = 2.0;
-    canvas.drawLine(const Offset(0, 2), Offset(size.width, y), cord);
-    const flagW = 11.0, flagH = 15.0, gap = 9.0;
-    var i = 0;
-    for (var x = 0.0; x < size.width - flagW; x += gap) {
-      final flag = Path()
-        ..moveTo(x, y)
-        ..lineTo(x + flagW, y + flagH)
-        ..lineTo(x + flagW * 0.5, y + 3)
-        ..lineTo(x, y + flagH)
-        ..close();
-      canvas.drawPath(flag, Paint()..color = colors[i % colors.length]);
-      i++;
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
 
 class _StatusPanel extends StatelessWidget {
   const _StatusPanel({
